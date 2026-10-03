@@ -283,14 +283,24 @@ function checkRulesAndCaptures(lastX, lastZ, playerColor, player_color, backupSt
 	local t = LANG_DICT[currentLang]
 	local enemyColor = (playerColor == 1) and 2 or 1
 	local stonesToRemove = {}
+	local capturedMap = {}
 
 	for _, dir in ipairs(DIRECTIONS) do
 		local nx = lastX + dir.x
 		local nz = lastZ + dir.z
+
 		if isValidCoord(nx, nz) and boardState[nx][nz] == enemyColor then
 			local group, liberties = getGroupAndLiberties(nx, nz, enemyColor)
+
 			if liberties == 0 then
-				for _, pos in ipairs(group) do table.insert(stonesToRemove, pos) end
+				for _, pos in ipairs(group) do
+					local key = pos.x .. ":" .. pos.z
+
+					if not capturedMap[key] then
+						capturedMap[key] = true
+						table.insert(stonesToRemove, pos)
+					end
+				end
 			end
 		end
 	end
@@ -325,7 +335,10 @@ end
 
 function revertMove(x, z, backupState)
 	local stoneObj = boardObjects[x][z]
-	if stoneObj then stoneObj.setLock(false) end
+	if stoneObj and not stoneObj.isDestroyed() then 
+		stoneObj.setLock(false)
+		stoneObj.destruct()
+	end
 	boardState = copyBoardState(backupState)
 	boardObjects[x][z] = nil
 end
@@ -343,6 +356,8 @@ function buttonPass(obj, player_color)
 	local playerNick = Player[player_color].steam_name or player_color
 	consecutivePasses = consecutivePasses + 1
 	printToAll(string.format(t.msg_player_passed, playerNick, currentTurn), {1, 1, 0})
+
+	previousBoardState = nil
 
 	if consecutivePasses >= 2 then
 		executeAutomaticScoring()
@@ -378,7 +393,7 @@ function executeAutomaticScoring()
 		for j = 1, BOARD_SIZE do
 			if boardState[i][j] ~= 0 then
 				local _, liberties = getGroupAndLiberties(i, j, boardState[i][j])
-				if liberties <= 1 then
+				if liberties == 0 then
 					local stoneObj = boardObjects[i][j]
 					if stoneObj and not stoneObj.isDestroyed() then stoneObj.destruct() end
 					boardState[i][j] = 0
